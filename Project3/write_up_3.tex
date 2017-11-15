@@ -1,0 +1,86 @@
+\documentclass[draftclsnofoot,onecolumn,letterpaper,10pt,titlepage]{IEEEtran}
+
+%\setlength{\mathindent}{1cm}
+
+\usepackage{graphicx}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+
+\usepackage{alltt}
+\usepackage{float}
+\usepackage{color}
+
+\usepackage{url}
+
+\usepackage{balance}
+\usepackage[TABBOTCAP, tight]{subfigure}
+\usepackage{enumitem}
+
+\usepackage{pstricks, pst-node}
+
+\usepackage{geometry}
+\geometry{textheight=9in, textwidth=6.5in}
+
+\newcommand{\cred}[1]{{\color{red}#1}}
+\newcommand{\cblue}[1]{{\color{blue}#1}}
+
+\usepackage{hyperref}
+
+\usepackage{textcomp}
+\usepackage{listings}
+
+\def\name{Charles Henninger}
+
+\hypersetup{
+  colorlinks = true,
+  urlcolor = black,
+  pdfauthor = {\name},
+  pdfkeyword = {cs444 ''Assignment 3''},
+  pdftitle = {Assignment 3 write up},
+  pdfsubject = {Assignment 3 write up},
+  pdfpagemode = UseNone,
+}
+
+\parindent = 0.0 in
+\parskip = 0.2 in
+
+\begin{document}
+
+\section*{Project 3}
+
+\textbf{Charles Henninger}
+
+\textbf{Project 3 Write Up}
+
+\textbf{Prepare a document containing the design you plan to use to implement the necessary algorithms.}
+	Since the sequence of function calls goes from init which calls request and request calls transfer, it made the process pretty simple. I decided to initialize the device and crypto in the initialization. The init function would call the request to get requests. The request would call the transfer function with the the request data stored in the buffer, whether it is a read or write, the starting offset sector, the amount of bytes sectors needed to be read/write and the device itself. The transfer would encrypt or decrypt depending on the read/write parameter and that's where I set the key and using that key to encrypt/decrypt the data. It would encrypt/decrypt every sector in the data until it is completely encrypt/decrypt as well as transfering the data from buffer to device driver and vice versa. Then the transfer function waits to be called by request again and then it should be request/transfer calls.
+
+\textbf{Answer the following questions in sufficient detail}
+
+    \textbf{1. What do you think the main point of this assignment is?}
+     To learn how to implement a device driver as a module within the Linux kernel. To learn how to use different commands from the Linux kernel and understand the kernel's structure a little better. As an example I didn't realize my device was inside the dev directory until I went to go search for it with the find command. To learn there are multiple ways of implementing encryption. There are multiple algorithms for this task as well as multiple variation on what function calls to use and when such as using a plain cipher to get each individual block or use another cipher that gets a continguous block all at once, but you must implement a scatterlist which was confusing to me. To learn how to transfer data from a device disk to a buffer with crypto cipher function calls and vice versa.
+
+    \textbf{2. How did you personally approach the problem? Design decisions, alogorithm, etc.}
+	This project was a bit tricky for me, due to me being slightly behind in this class due to the work required in my Capstone class. Looking around the web for examples, and using many, many print statements eventually got me through it though.  I  searched  up  all  of  the  function  calls  and  where  they  were  coming  from.  I  wrote  all  of  thesefunction calls down and then I figured out how to manipulate the transfer function as well as see the sequence ofexecution of functions in the Linux kernel. There was no algorithms for this as this was bare bones programming.I did plenty of research on stackoverflow to figure out encryption and had many failure and kernel panics. 
+    
+	\textbf{3. How did you ensure your solution was correct? Testing details, for instance.}
+    I used plenty of print statements to see my process and it came out as I expected which is initialize one time then get requests then transfer. The cycle goes on and on. If there's no pending requests then the request just waits for more requests. I tested the encryption by passing in my key and key length and seeing if my encryption sets the key or not. If it doesn't with a key and key length that I know would not work then it's correct which I can verify using print statements to see if my set key crypto function call fails. The next part is to see if there's anything on the device driver. There should be data on the device driver, so I used file I/O to input data into a file and then I check that file inside my Linux kernel to see if it was empty or not. I had to use less to even look at the file and since it was a binary file I saw plenty of data which I believe was good since I did initialize the device driver to all zeros.
+
+    \textbf{4. What did you learn?}
+	I learned plenty of useful information and more than plenty unuseful information that I may or may not use in the future. I learned how to boot my linux kernel and scp my device driver kernel object into my virtual machine. I also learned how to run and remove my module from reading some documentation provided by Kevin Mcgrath. I learned how to use a few different methods for encryption which only one worked for me and the others gave me a kernel panic. All of which I lived on stackoverflow for. I learned how to use basic file I/O from stackoverflow as well to get data from the device driver. I learned how to make a file system using a command. I also learned how to manipulate data with device drivers. I learned how to use file I/O in within the kernel which was not too bad.
+
+
+\bigskip
+
+\noindent
+
+\textbf{Work log. What was done when?}
+\begin{enumerate}
+\item 05/21/2017 Started playing around with simple block code and intense stack overflow research
+\item 05/22/2017 finished up my encryption code and write up for this project
+\end{enumerate}
+\end{document}
+
+  

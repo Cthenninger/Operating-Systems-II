@@ -1,0 +1,214 @@
+diff --git a/linux-yocto-3.14/arch/x86/syscalls/syscall_32.tbl b/linux-yocto-3.14/arch/x86/syscalls/syscall_32.tbl
+index 96bc506..822eaec 100644
+--- a/linux-yocto-3.14/arch/x86/syscalls/syscall_32.tbl
++++ b/linux-yocto-3.14/arch/x86/syscalls/syscall_32.tbl
+@@ -359,3 +359,6 @@
+ 350	i386	finit_module		sys_finit_module
+ 351	i386	sched_setattr		sys_sched_setattr
+ 352	i386	sched_getattr		sys_sched_getattr
++353	i386	get_claimed		sys_get_claimed
++354	i386	get_free		sys_get_free
++
+diff --git a/linux-yocto-3.14/include/linux/syscalls.h b/linux-yocto-3.14/include/linux/syscalls.h
+index a747a77..74ddf9f 100644
+--- a/linux-yocto-3.14/include/linux/syscalls.h
++++ b/linux-yocto-3.14/include/linux/syscalls.h
+@@ -855,4 +855,8 @@ asmlinkage long sys_process_vm_writev(pid_t pid,
+ asmlinkage long sys_kcmp(pid_t pid1, pid_t pid2, int type,
+ 			 unsigned long idx1, unsigned long idx2);
+ asmlinkage long sys_finit_module(int fd, const char __user *uargs, int flags);
++
++asmlinkage long sys_get_claimed(void);
++asmlinkage long sys_get_free(void);
++
+ #endif
+diff --git a/linux-yocto-3.14/mm/slob.c b/linux-yocto-3.14/mm/slob.c
+index 4bf8809..c300b76 100644
+--- a/linux-yocto-3.14/mm/slob.c
++++ b/linux-yocto-3.14/mm/slob.c
+@@ -56,6 +56,7 @@
+  * in order to prevent random node placement.
+  */
+ 
++#include <linux/syscalls.h>	/* For our syscalls */
+ #include <linux/kernel.h>
+ #include <linux/slab.h>
+ 
+@@ -87,6 +88,12 @@ typedef s16 slobidx_t;
+ typedef s32 slobidx_t;
+ #endif
+ 
++int mem_used = 0;
++int mem_claimed = 0;
++
++static unsigned long counter;
++int n = 5000;
++
+ struct slob_block {
+ 	slobidx_t units;
+ };
+@@ -217,8 +224,17 @@ static void slob_free_pages(void *b, int order)
+ static void *slob_page_alloc(struct page *sp, size_t size, int align)
+ {
+ 	slob_t *prev, *cur, *aligned = NULL;
++	slob_t *best_prev = NULL, *best_cur = NULL, *best_aligned = NULL;
++	
+ 	int delta = 0, units = SLOB_UNITS(size);
+-
++	int best_delta = 0;
++	
++	slobidx_t best_diff = 0;
++	
++	if (!(counter % n)) {
++		printk("Unit size: %d\n", units);
++	}
++	
+ 	for (prev = NULL, cur = sp->freelist; ; prev = cur, cur = slob_next(cur)) {
+ 		slobidx_t avail = slob_units(cur);
+ 
+@@ -227,9 +243,10 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
+ 			delta = aligned - cur;
+ 		}
+ 		if (avail >= units + delta) { /* room enough? */
++			/*
+ 			slob_t *next;
+-
+-			if (delta) { /* need to fragment head to align? */
++			
++			if (delta) { 
+ 				next = slob_next(cur);
+ 				set_slob(aligned, avail - delta, next);
+ 				set_slob(cur, delta, aligned);
+@@ -239,12 +256,12 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
+ 			}
+ 
+ 			next = slob_next(cur);
+-			if (avail == units) { /* exact fit? unlink. */
++			if (avail == units) { 
+ 				if (prev)
+ 					set_slob(prev, slob_units(prev), next);
+ 				else
+ 					sp->freelist = next;
+-			} else { /* fragment */
++			} else { 
+ 				if (prev)
+ 					set_slob(prev, slob_units(prev), cur + units);
+ 				else
+@@ -256,9 +273,62 @@ static void *slob_page_alloc(struct page *sp, size_t size, int align)
+ 			if (!sp->units)
+ 				clear_slob_page_free(sp);
+ 			return cur;
++			*/
++			
++			if (!(counter % n)) {
++				printk("Avail: %hu\n", avail);
++			}
++			
++			if (best_cur == NULL || avail - (units + delta) < best_diff) {
++				best_prev = prev;
++				best_cur = cur;
++				best_aligned = aligned;
++				best_delta = delta;
++				best_diff = avail - (units + delta);
++			}
+ 		}
+-		if (slob_last(cur))
++		
++		/* End of the list, allocate the best one found */
++		if (slob_last(cur)) {
++			if (best_cur != NULL) {
++				slob_t *best_next = NULL;
++				slobidx_t best_avail = slob_units(best_cur);
++
++				if (best_delta) { /* need to fragment head to align? */
++					best_next = slob_next(best_cur);
++					set_slob(best_aligned, best_avail - best_delta, best_next);
++					set_slob(best_cur, best_delta, best_aligned);
++					best_prev = best_cur;
++					best_cur = best_aligned;
++					best_avail = slob_units(best_cur);
++				}
++
++				best_next = slob_next(best_cur);
++				if (best_avail == units) { /* exact fit? unlink. */
++					if (best_prev)
++						set_slob(best_prev, slob_units(best_prev), best_next);
++					else
++						sp->freelist = best_next;
++				} else { /* fragment */
++					if (best_prev)
++						set_slob(best_prev, slob_units(best_prev), best_cur + units);
++					else
++						sp->freelist = best_cur + units;
++					set_slob(best_cur + units, best_avail - units, best_next);
++				}
++				
++				sp->units -= units;
++				if (!sp->units)
++					clear_slob_page_free(sp);
++				if (!(counter % n)) {
++					printk("Best: %hu\n\n", *best_cur);
++				}
++
++				return best_cur;
++			}
++			
+ 			return NULL;
++		}
+ 	}
+ }
+ 
+@@ -273,6 +343,8 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
+ 	slob_t *b = NULL;
+ 	unsigned long flags;
+ 
++	counter++;
++	
+ 	if (size < SLOB_BREAK1)
+ 		slob_list = &free_slob_small;
+ 	else if (size < SLOB_BREAK2)
+@@ -300,6 +372,8 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
+ 		b = slob_page_alloc(sp, size, align);
+ 		if (!b)
+ 			continue;
++		else
++			mem_used = mem_used + size;
+ 
+ 		/* Improve fragment distribution and reduce our average
+ 		 * search time by starting our next search here. (see
+@@ -328,6 +402,8 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
+ 		b = slob_page_alloc(sp, size, align);
+ 		BUG_ON(!b);
+ 		spin_unlock_irqrestore(&slob_lock, flags);
++		
++		mem_claimed = mem_claimed + PAGE_SIZE;
+ 	}
+ 	if (unlikely((gfp & __GFP_ZERO) && b))
+ 		memset(b, 0, size);
+@@ -352,9 +428,13 @@ static void slob_free(void *block, int size)
+ 	sp = virt_to_page(block);
+ 	units = SLOB_UNITS(size);
+ 
++	mem_used = mem_used - size;
++	
+ 	spin_lock_irqsave(&slob_lock, flags);
+ 
+ 	if (sp->units + units == SLOB_UNITS(PAGE_SIZE)) {
++		mem_claimed = mem_claimed - PAGE_SIZE;
++		
+ 		/* Go directly to page allocator. Do not pass slob allocator */
+ 		if (slob_page_free(sp))
+ 			clear_slob_page_free(sp);
+@@ -643,3 +723,12 @@ void __init kmem_cache_init_late(void)
+ {
+ 	slab_state = FULL;
+ }
++
++asmlinkage long sys_get_claimed(void){
++	return mem_claimed;
++
++}
++
++asmlinkage long sys_get_free(void){
++	return mem_claimed - mem_used;
++}
